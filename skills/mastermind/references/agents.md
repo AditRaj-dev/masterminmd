@@ -33,7 +33,7 @@ CODE NAVIGATION: <graph available? "Query the code graph MCP tools to locate sym
 
 <paste style-rules.md STYLE BLOCK>
 
-DESIGN (frontend tasks only): follow docs/DESIGN.md tokens/components exactly; the approved wireframe wireframe/<page>.html is the structural contract.
+DESIGN (frontend tasks only): follow docs/DESIGN.md tokens/components exactly; the approved mockup wireframe/<page>.html is the structural + visual contract — reuse its tokens.css values as the project's design tokens.
 
 VERIFY before reporting: <task-specific check — run build, run the test, open the page>. Report what you ran and its actual output.
 

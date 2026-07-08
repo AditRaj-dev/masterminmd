@@ -17,7 +17,7 @@ Hierarchical build-orchestrator skills for [Claude Code](https://claude.com/clau
 | 4 Plan | `docs/IMPLEMENTATION_PLAN.md` — Haiku-sized tasks, parallel groups |
 | 5 API record | `docs/API_RECORD.md` — verified-only API registry (anti-hallucination: unlisted API = review FAIL) |
 | 6 Design | `docs/DESIGN.md` — 4 bundled design systems merged (ui-ux-pro-max, impeccable, taste-design, frontend-design) |
-| 7 Wireframe | grayscale HTML wireframes: Haiku builds, Sonnet reviews, user clicks through |
+| 7 Mockups | high-fidelity static HTML+CSS mockups — real colors, fonts, spacing, corner radii from DESIGN.md via shared tokens.css: Haiku builds, Sonnet reviews fidelity, user clicks through |
 | 8 Build | orchestrated execution: diff-based reviews, fix loop → root-cause debugging, commit per task, final whole-branch review |
 | 9 Wrap | evidence-based verification + 4-option branch finish (merge / PR / keep / discard) |
 

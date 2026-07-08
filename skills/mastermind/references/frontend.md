@@ -15,25 +15,30 @@ Read the bundled design references IN THIS ORDER and synthesize one `docs/DESIGN
 
 Also honor the user's Round-4 discovery answers (adjectives, reference products, dark/light). GATE: user approves DESIGN.md.
 
-## Phase 7 — Wireframe (Haiku builds, Sonnet reviews, user sees it)
+## Phase 7 — High-fidelity mockups (Haiku builds, Sonnet reviews, user sees it)
 
-Purpose: user sees and approves the structure of every page BEFORE real frontend work. Deliberately unstyled — structure, not beauty.
+Purpose: user sees and approves how every page actually LOOKS — real colors, typography, spacing, corner radii, shadows — before real frontend work. These are static previews of the final design, not the final code.
 
-### Wireframe rules
-- Location: `wireframe/` — one `<page>.html` per page in the PRD's user flows, plus `wireframe/wf.css` shared.
-- **Grayscale only**: white/black/3 grays. System font. No brand colors, no images (gray placeholder boxes labeled "IMG: hero photo"), no icons (text labels), no JS beyond trivial nav.
-- Real structure: actual nav with working links between wireframe pages, real headings/copy hierarchy (draft copy OK, no lorem ipsum), every component from DESIGN.md's inventory present as a labeled box, every PRD flow walkable page-to-page.
-- Every feature's states get wireframed: each page shows its default state, plus a `<page>-states.html` strip showing empty / loading / error variants.
+### Mockup rules
+- Location: `wireframe/` — one `<page>.html` per page in the PRD's user flows, plus `wireframe/tokens.css` shared.
+- **Implements DESIGN.md faithfully**: `tokens.css` carries the design system as CSS variables (palette hex values, font pairing loaded via Google Fonts `<link>`, spacing scale, corner radii, shadows, motion durations as comments). Every page consumes the tokens — no hard-coded one-off values.
+- Real look: actual colors on actual components, real fonts, real border-radius, real elevation. Buttons/cards/inputs styled per DESIGN.md's component inventory with hover/focus states in CSS.
+- Real structure: working nav links between pages, real headings/copy hierarchy (draft copy OK, no lorem ipsum), every DESIGN.md component present, every PRD flow walkable page-to-page.
+- **Still static**: HTML+CSS only, no JS beyond trivial nav. Images: verified stock URLs (per the impeccable imagery rules — verify they resolve) or neutral placeholder blocks styled with the design's surface tokens; never broken links.
+- Every feature's states get mocked: each page shows its default state, plus a `<page>-states.html` strip showing empty / loading / error variants — styled per DESIGN.md.
+- Run the impeccable Absolute Bans over the mockups (gradient text, eyebrow kickers, identical card grids…) — catching a ban here is 10x cheaper than in Phase 8.
 
 ### Loop
-1. **Dispatch Haiku coder** (references/agents.md template; task = wireframe set, spec = PRD flows + DESIGN.md component inventory + rules above).
+1. **Dispatch Haiku coder** (references/agents.md template; task = mockup set, spec = PRD flows + full DESIGN.md + rules above).
 2. **Dispatch Sonnet reviewer** with rubric:
    - Every PRD §4 flow walkable by clicking through the pages?
    - Every P0 feature's UI represented, with all its states?
+   - **DESIGN.md fidelity**: palette hex values, fonts, spacing scale, corner radii, shadows all match the tokens — any deviation or hard-coded off-token value = FAIL?
    - Layout follows DESIGN.md composition notes?
+   - No impeccable Absolute Ban present (= FAIL)?
    - Nothing present that PRD marks as non-goal?
-   - Grayscale/no-styling rules respected (a styled wireframe = FAIL — it anchors the user on wrong visuals)?
+   - Static rule respected (no app logic in JS)?
 3. Fix loop per agents.md (max 3 rounds).
-4. **Show the user**: serve the folder (preview server or `Start-Process wireframe\index.html`) and name each page + which flow it covers. GATE: user clicks through and approves / requests changes (changes → back to step 1 with a delta task).
+4. **Show the user**: serve the folder (preview server or `Start-Process wireframe\index.html`) and name each page + which flow it covers. GATE: user clicks through and approves / requests changes (changes → back to step 1 with a delta task). Visual changes the user requests here get written BACK into DESIGN.md so the two never diverge.
 
-Approved wireframes become the structural contract for Phase 8 frontend tasks.
+Approved mockups become the structural AND visual contract for Phase 8 frontend tasks: same tokens.css seeds the real project's design tokens.
