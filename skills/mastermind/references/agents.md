@@ -1,6 +1,28 @@
-# Agent dispatch — Haiku codes, Sonnet reviews, orchestrator integrates
+# Agent dispatch — specialists code, Sonnet reviews, orchestrator integrates
 
-Mechanism: the `Agent` tool with `model: "haiku"` (coders) or `model: "sonnet"` (reviewers), `subagent_type: "general-purpose"`. The orchestrator NEVER writes production code itself — it discusses, documents, dispatches, verifies, integrates.
+Mechanism: the `Agent` tool. Coders: route by task domain to a specialist `subagent_type` (table below); no domain match → `subagent_type: "general-purpose"`, `model: "haiku"`. Reviewers: `model: "sonnet"`, `general-purpose` — except architectural passes and the final whole-branch review, which may use `subagent_type: "architect"`. The orchestrator NEVER writes production code itself — it discusses, documents, dispatches, verifies, integrates.
+
+## Specialist routing (agents live in ~/.claude/agents)
+
+| task domain (from plan task's `domain` tag or file paths) | subagent_type |
+|---|---|
+| nextjs (app/, pages/, next.config) | `nextjs-dev` |
+| react (SPA components, hooks, non-Next) | `react-dev` |
+| react-native / expo | `react-native-dev` |
+| flutter / dart | `flutter-dev` |
+| database (schema, migrations, queries, ORM) | `database-engineer` |
+| api (endpoints, route handlers, webhooks, auth boundaries) | `api-developer` |
+| design (Phase 6–7: tokens, wireframes, Figma) | `ui-designer` |
+| anything else | `general-purpose` + `model: "haiku"` |
+
+Specialist defs already carry the style block, memory/HANDOFF reading, memex protocol, API-record rule, and report format — so a specialist dispatch prompt is SHORT: project name + working dir, task id/title, feature doc path, files allowed, verify command, and any task-specific notes. Do NOT re-paste the templates below into specialist prompts; those templates are for `general-purpose` dispatches only.
+
+## memex task lifecycle (shared cross-provider memory — `memex` CLI / memex MCP tools)
+
+- Phase 0: register the project in `~/.claude/projects-registry.json`; Phase 4 approval: seed the board — `memex task set <id> --project <name> --title <t> --domain <d> --status todo` per plan task.
+- Dispatch a task → `memex task set <id> --project <name> --status in_progress --assignee <agent>`.
+- Task accepted → `memex task set <id> --project <name> --status done`. Coders end by creating a `memex handoff`; when dispatching a dependent task, tell the agent the open handoff id to accept.
+- Blocked → `--status blocked`; the handoff's `--blockers` field says why.
 
 ## Pre-flight plan review (once, before dispatching task 1)
 

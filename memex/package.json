@@ -1,0 +1,13 @@
+{
+  "name": "memex",
+  "version": "1.0.0",
+  "description": "Shared agent memory + task handoff store (CLI + MCP) backed by SQLite",
+  "bin": {
+    "memex": "./cli.js",
+    "memex-mcp": "./mcp.js"
+  },
+  "scripts": {
+    "test": "node test.js"
+  },
+  "license": "MIT"
+}

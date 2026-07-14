@@ -27,17 +27,44 @@ Cross-cutting: memory docs (`MEMORY.md` mistakes→resolutions + `HANDOFF.md`) r
 
 Scans an ongoing codebase → `docs/INITIAL_STATE.md` (stack, structure, feature census, health) + `docs/CODE_STATE.md` (git work-stream history, where coding stopped, unfinished-work inventory, resume points) → finds existing PRDs and asks whether to adopt them (gap-check interview) or runs full discovery → hands off to `/mastermind continue`.
 
+### `/projects` — cross-project overview board
+
+Reads `~/.claude/projects-registry.json` (mastermind Phase 0 auto-registers projects) + the memex board + git state per project, and renders a one-screen status table: tasks done/total, open handoffs, last commit, dirty files, next step. `add <path>` registers a project, `open <name>` prints resume instructions, `html` renders a report.
+
+## Agentic-OS layer (agents/ + memex/)
+
+Mastermind's Phase 8 routes coder tasks by **domain tag** to hardened specialist agents instead of generic Haiku dispatches (routing table: `skills/mastermind/references/agents.md`):
+
+| agent | model | domain |
+|---|---|---|
+| `nextjs-dev`, `react-dev`, `react-native-dev`, `flutter-dev` | haiku | frontend/mobile stacks |
+| `database-engineer`, `api-developer` | haiku | data + service layers |
+| `architect` | sonnet | review-only architectural passes |
+| `ui-designer` | sonnet | tokens, wireframes, Figma (Phase 6–7) |
+
+Each agent def is self-contained: ~17 non-negotiable domain rules, caveman/ponytail style, memory + API-record protocol, verification iron law. Unmatched domains fall back to `general-purpose` + haiku, so mastermind still works without the agents installed.
+
+**memex** (`memex/`) — shared memory + task-handoff store all providers can reach: zero-dep Node CLI (`node:sqlite`, FTS5 search, DB at `~/.claude/memex.db`) plus a thin MCP wrapper for native Claude tools. Agents log decisions (`memex remember`), pass work via structured handoffs (`memex handoff create/accept`), and mirror plan status (`memex task set`) — the `/projects` board reads the same DB.
+
+**Multi-provider bridge** (`agents/references/providers.md`) — headless second opinions: `gemini -p` (UI instinct, auth via `GEMINI_API_KEY`) and `codex exec` (backend logic). Advisory only; Claude agents own the final code and every consult is logged to memex.
+
 ## Install
 
 ```powershell
 git clone https://github.com/AditRaj-dev/masterminmd
 Copy-Item -Recurse masterminmd\skills\* "$env:USERPROFILE\.claude\skills\"
+Copy-Item -Recurse masterminmd\agents "$env:USERPROFILE\.claude\agents"
+npm install -g .\masterminmd\memex
+claude mcp add --scope user memex -- memex-mcp
 ```
 
 ```bash
 # macOS / Linux
 git clone https://github.com/AditRaj-dev/masterminmd
 cp -r masterminmd/skills/* ~/.claude/skills/
+cp -r masterminmd/agents ~/.claude/agents
+npm install -g ./masterminmd/memex
+claude mcp add --scope user memex -- memex-mcp
 ```
 
 **Path note:** the skill files cross-reference each other via absolute paths under `C:\Users\study\.claude\skills\`. After copying, rewrite them for your machine:
