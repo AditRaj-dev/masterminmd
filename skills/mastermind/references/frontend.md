@@ -42,3 +42,13 @@ Purpose: user sees and approves how every page actually LOOKS — real colors, t
 4. **Show the user**: serve the folder (preview server or `Start-Process wireframe\index.html`) and name each page + which flow it covers. GATE: user clicks through and approves / requests changes (changes → back to step 1 with a delta task). Visual changes the user requests here get written BACK into DESIGN.md so the two never diverge.
 
 Approved mockups become the structural AND visual contract for Phase 8 frontend tasks: same tokens.css seeds the real project's design tokens.
+
+Keep the mockups mechanically convertible — Phase 7.5 (`references/html-to-react.md`) turns them into
+React/Next components by script, and it pays off in proportion to how regular they are:
+- **Repeated blocks must be structurally identical** (same tags, same class lists, same child order).
+  Vary only text and attribute values between instances. A card that drops an `<svg>` in one instance
+  breaks the repeat group and forces a hand-written component.
+- Same header/footer markup byte-for-byte on every page.
+- Semantic tags and stable class names; no inline `style=` unless the value genuinely varies per instance.
+- Cross-page nav via plain `<a href="page.html">` — those become routes automatically.
+- No JS beyond trivial nav (it gets dropped on conversion anyway).
