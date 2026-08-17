@@ -26,7 +26,8 @@ Write triggers (orchestrator):
 
 ## docs/memory/HANDOFF.md — overwritten snapshot
 
-Rewritten (not appended) after every completed task and every phase gate:
+Rewritten (not appended) after every completed task and every phase gate. This file is what
+a brand-new session with an empty context window wakes up to, so it has to stand alone:
 
 ```markdown
 # Handoff — <project name>
@@ -38,10 +39,20 @@ Phase: <n> — <name> · Gate status: <awaiting user | approved>
 ## Task board
 Done: T01, T02 · In review: T03 · Next up: T04 (parallel group B: T04+T05)
 
+## Frozen facts
+Stack: <framework + version, language, package manager>
+Commands: run `<cmd>` · build `<cmd>` · test `<cmd>` · typecheck `<cmd>`
+Layout: <top two levels of the tree, one line each>
+Tokens: <path to tokens.css + the token names in use>
+Wireframe: wireframe/INDEX.md · .h2r/manifest.md · <n> pages · <DRAFT|APPROVED|FROZEN> — read those two, never the .html
+Components: <inventory after Phase 7.5 — name → file → props>
+Services: <external service → env var names>
+Locked decisions: <choice → one-line why> (one per line)
+
 ## Read before doing anything
 1. docs/memory/MEMORY.md (mistakes & decisions)
-2. docs/IMPLEMENTATION_PLAN.md (current statuses)
-3. Your task's feature doc
+2. the read-set for this phase (references/session-handoff.md) — nothing beyond it
+3. Your task's feature doc (agents only)
 4. docs/API_RECORD.md
 
 ## Immediate next step
@@ -50,6 +61,17 @@ Done: T01, T02 · In review: T03 · Next up: T04 (parallel group B: T04+T05)
 ## Known landmines
 <top 3 gotchas from MEMORY.md that affect upcoming tasks>
 ```
+
+**Frozen facts** is the anti-re-reading device. Anything you learned by opening a file and
+would otherwise open that file again to re-learn goes here the first time. Facts only, no
+prose; correct them in place when they change. If a session finds itself reading a file to
+answer a question Frozen facts should have answered, it adds the answer before moving on.
+
+## docs/memory/RESUME.md — the paste-into-a-new-session prompt
+
+Written at every approved gate, overwritten each time. It is the handoff *prompt* (the
+HANDOFF is the handoff *state*). Template and the one-phase-per-session procedure:
+`references/session-handoff.md`.
 
 ## Agent contract
 

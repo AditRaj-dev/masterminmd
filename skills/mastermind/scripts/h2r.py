@@ -11,7 +11,7 @@ link rewriting, css wiring). The model only writes plan.json — names, prop nam
 
 ponytail: stdlib only (html.parser). No bs4/lxml dep for a one-shot codegen tool.
 """
-import argparse, html, json, os, re, shutil, sys
+import argparse, collections, html, json, os, re, shutil, sys
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -307,7 +307,7 @@ def cmd_extract(a):
     out.mkdir(parents=True, exist_ok=True)
     (out / "manifest.md").write_text("\n".join(L), encoding="utf-8")
     (out / "plan.schema.json").write_text(PLAN_SCHEMA, encoding="utf-8")
-    print(f"wrote {out/'manifest.md'} ({len(L)} lines) — {len(groups)} repeat groups, {len(pages)} pages")
+    print(f"wrote {out/'manifest.md'} ({len(L)} lines) - {len(groups)} repeat groups, {len(pages)} pages")
     print(f"next: write {out/'plan.json'} (schema: {out/'plan.schema.json'}), then: h2r.py emit")
 
 
@@ -332,10 +332,22 @@ def jsx_attr_pair(k, v):
     if not (name.startswith("data-") or name.startswith("aria-")) and "-" in name and name not in ATTR.values():
         name = ATTR.get(k, name)
     if v is None:
-        return name
+        # bare attr is `true` in JSX — only correct for the real boolean attributes;
+        # everything else (crossOrigin, download…) is typed string and needs ""
+        return name if name.lower() in BOOL_ATTR else f'{name}=""'
     if MARK in v:
         return f"{name}={{{v.replace(MARK,'')}}}"
+    if name in NUM_ATTR and v.lstrip("-").isdigit():
+        return f"{name}={{{v}}}"
     return f'{name}="{v}"' if '"' not in v else f"{name}={{{json.dumps(v)}}}"
+
+
+BOOL_ATTR = {"required", "disabled", "checked", "selected", "open", "hidden", "multiple",
+             "readonly", "readOnly", "autofocus", "autoFocus", "novalidate", "noValidate",
+             "defer", "async", "reversed", "loop", "muted", "controls", "autoplay", "autoPlay",
+             "default", "ismap", "isMap", "playsinline", "playsInline", "itemscope", "itemScope"}
+NUM_ATTR = {"rows", "cols", "size", "maxLength", "minLength", "tabIndex",
+            "colSpan", "rowSpan", "span", "start"}
 
 
 def style_obj(v):
@@ -350,13 +362,28 @@ def style_obj(v):
     return ", ".join(out)
 
 
+# HTML's value/checked ARE the initial value; React's same-named props mean "controlled",
+# which warns and renders read-only until Phase 8 attaches a handler.
+UNCONTROLLED = {("input", "value"): "defaultValue", ("textarea", "value"): "defaultValue",
+                ("input", "checked"): "defaultChecked"}
+
+
 def jsx_attrs_str(n):
-    parts = [p for p in (jsx_attr_pair(k, v) for k, v in n.attrs.items()) if p]
+    parts = [p for p in (jsx_attr_pair(UNCONTROLLED.get((n.tag, k), k), v)
+                         for k, v in n.attrs.items() if not (n.tag == "option" and k == "selected")) if p]
+    if n.tag == "select":
+        # React wants the initial selection on the <select>, not as `selected` on an <option>
+        sel = next((o for o in iter_tag(n, "option") if "selected" in o.attrs), None)
+        if sel is not None:
+            parts.append(f'defaultValue="{sel.attrs.get("value") or text_of(sel).strip()}"')
     return (" " + " ".join(parts)) if parts else ""
 
 
 def esc_text(t):
-    return t.replace("{", "{'{'}").replace("}", "{'}'}")
+    # '<' and '>' must go back to entities: the parser decoded them out of the source,
+    # and raw ones in JSX text are parsed as tags (e.g. <code>&lt;dialog&gt;</code>).
+    return (t.replace("{", "{'{'}").replace("}", "{'}'}")
+             .replace("<", "&lt;").replace(">", "&gt;"))
 
 
 def render(n, ind, usage=None, body=None, out=None, ctx=None):
@@ -410,16 +437,21 @@ class Ctx:
         return tag
 
     def _route(self, n):
-        href = (n.attrs.get("href") or "").split("#")[0]
+        href, _ = split_href(n.attrs.get("href") or "")
         return self.routes.get(Path(href).stem) if href.endswith(".html") else None
 
     def rewrite_link(self, n, attrs):
         r = self._route(n)
         if r is None:
             return attrs
-        frag = (n.attrs.get("href") or "")
-        anchor = "#" + frag.split("#", 1)[1] if "#" in frag else ""
-        return re.sub(r'href="[^"]*"', f'href="{r}{anchor}"', attrs)
+        _, suffix = split_href(n.attrs.get("href") or "")
+        return re.sub(r'href="[^"]*"', f'href="{r}{suffix}"', attrs)
+
+
+def split_href(href):
+    """('book.html?tier=x#y') -> ('book.html', '?tier=x#y'). Query counts, not just the anchor."""
+    i = min((href.find(c) for c in "?#" if c in href), default=-1)
+    return (href, "") if i < 0 else (href[:i], href[i:])
 
 
 def sub_props(root, props, ctx):
@@ -447,10 +479,12 @@ def prop_value(inst, p, ctx):
     if not attr:
         return text_of(node)
     v = node.attrs.get(attr) or ""
-    if attr in ("href", "action") and v.split("#")[0].endswith(".html"):
-        r = ctx.routes.get(Path(v.split("#")[0]).stem)
-        if r is not None:
-            v = r + ("#" + v.split("#", 1)[1] if "#" in v else "")
+    if attr in ("href", "action"):
+        base, suffix = split_href(v)
+        if base.endswith(".html"):
+            r = ctx.routes.get(Path(base).stem)
+            if r is not None:
+                v = r + suffix
     return v
 
 
@@ -463,12 +497,101 @@ def callsite(name, props, inst, ctx):
             child = at(inst, ref or ".")
             continue
         v = prop_value(inst, p, ctx)
-        parts.append(f'{p["name"]}="{v}"' if '"' not in v and "\n" not in v else f'{p["name"]}={json.dumps(v)}')
+        parts.append(f'{p["name"]}="{v}"' if '"' not in v and "\n" not in v else f'{p["name"]}={{{json.dumps(v)}}}')
     a = (" " + " ".join(parts)) if parts else ""
     if child is None:
         return f"<{name}{a} />"
     inner = "\n".join(s for s in (render(k, 0, ctx=ctx) for k in child.kids if not blank(k)) if s.strip())
     return f"<{name}{a}>\n{inner}\n</{name}>"
+
+
+def inline_css(style_node):
+    return "".join(k.text or "" for k in style_node.kids if k.tag == "#text").strip()
+
+
+# ---------------------------------------------------------------- css hoisting
+# Mockup pages carry the whole stylesheet inline, reset and all, repeated on every page.
+# Emitting that per route gives you N copies of :root/body fighting each other. Split it:
+# document-scope and repeated rules go to one global.css, only the residue stays per page.
+
+# a selector is document-scope when the WHOLE of it is the root/element/universal target
+# (`body`, `body.dark`, `:root`, `*::before`) - `body > .nav` is ordinary page styling.
+DOC_SEL = re.compile(r"^(:root|html|body|\*)([.#:\[][^\s>+~,]*)*$", re.I)
+DOC_AT = ("@font-face", "@import", "@keyframes", "@charset", "@page")
+
+
+def css_rules(css):
+    """Split a stylesheet into top-level rules. Brace-aware, comment- and string-safe."""
+    out, buf, depth, i, n = [], [], 0, 0, len(css)
+    while i < n:
+        ch = css[i]
+        if css.startswith("/*", i):
+            j = css.find("*/", i + 2)
+            j = n if j < 0 else j + 2
+            buf.append(css[i:j]); i = j; continue
+        if ch in "\"'":
+            j = i + 1
+            while j < n and css[j] != ch:
+                j += 2 if css[j] == "\\" else 1
+            buf.append(css[i:j + 1]); i = j + 1; continue
+        buf.append(ch)
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth <= 0:
+                out.append("".join(buf).strip()); buf, depth = [], 0
+        elif ch == ";" and depth == 0:      # @import / @charset end at the semicolon
+            out.append("".join(buf).strip()); buf = []
+        i += 1
+    out.append("".join(buf).strip())
+    return [r for r in out if r.strip(" \t\r\n;")]
+
+
+def doc_scope(rule):
+    """Does this rule style the document itself (so it belongs in global.css)?"""
+    sel = rule.split("{", 1)[0].strip()
+    if sel.startswith(("@media", "@supports", "@layer", "@container")):
+        inner = rule.split("{", 1)[1].rsplit("}", 1)[0] if "{" in rule else ""
+        return any(doc_scope(r) for r in css_rules(inner))
+    if sel.startswith("@"):
+        return sel.split()[0].lower().startswith(DOC_AT)
+    return any(DOC_SEL.match(s.strip()) for s in sel.split(",") if s.strip())
+
+
+def css_key(rule):
+    return re.sub(r"\s+", " ", rule).strip()
+
+
+def split_css(page_css):
+    """{stem: css} -> (global_rules, {stem: residue_rules}).
+
+    Hoisted: document-scope rules, and any rule appearing verbatim on 2+ pages. One page in
+    the set means there is no per-route CSS to speak of — all of it is global."""
+    parsed = {stem: css_rules(t) for stem, t in page_css.items()}
+    seen = collections.Counter(css_key(r) for rules in parsed.values() for r in set_ord(rules))
+    hoist = (lambda r: True) if len(parsed) < 2 else \
+        (lambda r: doc_scope(r) or seen[css_key(r)] > 1)
+    glob, taken, residue = [], set(), {}
+    for stem, rules in parsed.items():
+        keep = []
+        for r in rules:
+            if hoist(r):
+                if css_key(r) not in taken:
+                    taken.add(css_key(r)); glob.append(r)
+            else:
+                keep.append(r)
+        residue[stem] = keep
+    return glob, residue
+
+
+def set_ord(rules):
+    """Unique rules, source order — a page repeating a rule twice must not look like two pages."""
+    seen, out = set(), []
+    for r in rules:
+        if css_key(r) not in seen:
+            seen.add(css_key(r)); out.append(r)
+    return out
 
 
 def ts_type(p):
@@ -495,7 +618,7 @@ def cmd_emit(a):
         if "repeat" in c:
             inst = groups.get(c["repeat"])
             if not inst:
-                sys.exit(f"plan references {c['repeat']} which no longer exists — re-run extract")
+                sys.exit(f"plan references {c['repeat']} which no longer exists - re-run extract")
             root = inst[0][2]
             for nm, body, n in inst:
                 usage_by_page.setdefault(nm, {})[path_of(n, body)] = callsite(c["name"], props, n, ctx)
@@ -520,13 +643,27 @@ def cmd_emit(a):
         code = f"{pre}{head}\n  return (\n{body_jsx}\n  )\n}}\n"
         written.append(write(outdir / comp_dir / f"{c['name']}.tsx", code, a.dry))
 
+    # a mockup with no build step keeps its page CSS in an inline <style>; that is most of the
+    # styling. Drop it and the page renders naked. Split it once, up front: shared rules to
+    # global.css (imported by the layout), only what is genuinely page-local stays per route.
+    styles_rel = "app/styles" if fw == "next" else "src/styles"
+    styles = outdir / styles_rel
+    page_css = {}
+    for pg in plan.get("pages", []):
+        stem = pg["src"].replace(".html", "")
+        t = "\n".join(x for x in (inline_css(n) for n in iter_tag(dict(pages)[stem], "style")) if x)
+        if t:
+            page_css[stem] = t
+    global_rules, residue = split_css(page_css) if page_css else ([], {})
+
     imports_all = sorted({c["name"] for c in plan.get("components", [])})
     for pg in plan.get("pages", []):
         stem = pg["src"].replace(".html", "")
         body = find(dict(pages)[stem], "body")
         usage = usage_by_page.get(stem, {})
         ctx.used_link = False
-        kids = [render(k, 3, usage, body, ctx=ctx) for k in body.kids if not blank(k) and k.tag != "script"]
+        kids = [render(k, 3, usage, body, ctx=ctx) for k in body.kids
+                if not blank(k) and k.tag not in ("script", "style")]
         jsx = "\n".join(s for s in kids if s.strip())
         used = [n for n in imports_all if re.search(rf"<{n}[\s/>]", jsx)]
         imp = "".join(f"import {n} from '@/{comp_dir}/{n}'\n" for n in used) if fw == "next" \
@@ -535,6 +672,11 @@ def cmd_emit(a):
             imp = "import Link from 'next/link'\n" + imp
         name = pg.get("name") or stem.title().replace("-", "")
         head = find(dict(pages)[stem], "head")
+        if residue.get(stem):
+            css_name = f"page-{stem}.css"
+            written.append(write(styles / css_name, "\n\n".join(residue[stem]) + "\n", a.dry))
+            imp = (f"import '@/app/styles/{css_name}'\n" if fw == "next"
+                   else f"import '../styles/{css_name}'\n") + imp
         title = text_of(find(head, "title")) if head and find(head, "title") else None
         meta = f"\nexport const metadata = {{ title: {json.dumps(title)} }}\n" if title and fw == "next" else ""
         code = f"{imp}{meta}\nexport default function {name}() {{\n  return (\n    <>\n{jsx}\n    </>\n  )\n}}\n"
@@ -545,15 +687,19 @@ def cmd_emit(a):
             dest = outdir / "src" / "pages" / f"{name}.tsx"
         written.append(write(dest, code, a.dry))
 
-    # css
-    styles = outdir / ("app/styles" if fw == "next" else "src/styles")
-    css_files = sorted(src.glob("*.css"), key=lambda p: (p.name != "tokens.css", p.name))
-    for c in css_files:
+    # css — mockup stylesheets copied as-is, then the hoisted global last (it came from the
+    # inline <style>, which in the mockup's head sits after the <link>s, so it wins the same way)
+    css_names = []
+    for c in sorted(src.glob("*.css"), key=lambda p: (p.name != "tokens.css", p.name)):
         if not a.dry:
             styles.mkdir(parents=True, exist_ok=True)
             shutil.copy2(c, styles / c.name)
-        written.append(str(styles / c.name))
-    imports_css = "".join(f"import './styles/{c.name}'\n" for c in css_files)
+        written.append(str(styles / c.name)); css_names.append(c.name)
+    if global_rules:
+        hdr = f"/* hoisted by h2r from the inline <style> of {len(page_css)} mockup page(s) */\n\n"
+        written.append(write(styles / "global.css", hdr + "\n\n".join(global_rules) + "\n", a.dry))
+        css_names.append("global.css")
+    imports_css = "".join(f"import './styles/{n}'\n" for n in css_names)
 
     if plan.get("layout", True) and fw == "next":
         head = find(pages[0][1], "head")
@@ -569,7 +715,7 @@ def cmd_emit(a):
     elif fw != "next":
         written.append(write(outdir / "src/styles.ts", "// import these in your entry:\n" + imports_css, a.dry))
 
-    print(("DRY RUN — would write:\n" if a.dry else "wrote:\n") + "\n".join("  " + w for w in written))
+    print(("DRY RUN - would write:\n" if a.dry else "wrote:\n") + "\n".join("  " + w for w in written))
 
 
 def write(path: Path, code: str, dry: bool):
@@ -596,11 +742,47 @@ def cmd_verify(a):
             bad.append(f"{f}  unbalanced braces ({t.count('{')} vs {t.count('}')})")
         if t.count("(") != t.count(")"):
             bad.append(f"{f}  unbalanced parens")
-    print(f"{len(files)} tsx files, {sum(len(p.read_text(encoding='utf-8',errors='replace').splitlines()) for p in files)} lines")
+
+    # route-scoped CSS must not style the document or repeat another route's rules — that is
+    # the same stylesheet emitted N times, and the last route loaded wins.
+    css = [p for p in Path(a.dir).rglob("page-*.css") if p.parent.name == "styles"]
+    where = collections.defaultdict(list)
+    for f in css:
+        for r in css_rules(f.read_text(encoding="utf-8", errors="replace")):
+            if doc_scope(r):
+                bad.append(f"{f}  document-scope rule in route CSS: {css_key(r)[:60]}"
+                           f"  -> belongs in styles/global.css (re-run emit)")
+            where[css_key(r)].append(f.name)
+    for k, fs in where.items():
+        if len(fs) > 1:
+            bad.append(f"{', '.join(sorted(set(fs)))}  same rule in {len(set(fs))} route files: "
+                       f"{k[:60]}  -> hoist to styles/global.css (re-run emit)")
+
+    print(f"{len(files)} tsx files, {sum(len(p.read_text(encoding='utf-8',errors='replace').splitlines()) for p in files)} lines"
+          + (f", {len(css)} route css files" if css else ""))
     if bad:
         print("ISSUES:\n" + "\n".join("  " + b for b in bad))
         sys.exit(1)
-    print("clean — now run the real typecheck/build (tsc --noEmit / next build)")
+    print("clean - now run the real typecheck/build (tsc --noEmit / next build)")
+
+
+def cmd_selftest(a):
+    """The css splitter is the only parser here that can silently emit wrong output."""
+    r = css_rules('@import "x.css";\n:root{--a:1}\n/* c } */\n.a{content:"}"}\n@media(w:1px){body{m:0}}')
+    assert r == ['@import "x.css";', ':root{--a:1}', '/* c } */\n.a{content:"}"}',
+                 '@media(w:1px){body{m:0}}'], r
+    assert [doc_scope(x) for x in r] == [True, True, False, True], [doc_scope(x) for x in r]
+    assert doc_scope("body.dark{a:1}") and doc_scope("*,*::before{b:2}")
+    assert not doc_scope("body > .nav{c:3}") and not doc_scope(".card{d:4}")
+
+    g, res = split_css({"a": ":root{--x:1}\n.hero{a:1}\n.btn{b:2}",
+                        "b": ":root{--x:1}\n.list{c:3}\n.btn{b:2}"})
+    assert [css_key(x) for x in g] == [":root{--x:1}", ".btn{b:2}"], g   # shared + doc-scope
+    assert [css_key(x) for x in res["a"]] == [".hero{a:1}"], res         # residue only
+    assert [css_key(x) for x in res["b"]] == [".list{c:3}"], res
+    assert split_css({"only": ".hero{a:1}"})[1]["only"] == []            # 1 page -> all global
+    assert split_css({"a": ".x{a:1}\n.x{a:1}", "b": ".y{b:2}"})[0] == [] # dup within a page ≠ shared
+    print("selftest ok")
 
 
 PLAN_SCHEMA = json.dumps({
@@ -641,9 +823,11 @@ def main():
     m.add_argument("--dry", action="store_true")
     m.set_defaults(fn=cmd_emit)
 
-    v = sub.add_parser("verify", help="sanity-check emitted tsx")
+    v = sub.add_parser("verify", help="sanity-check emitted tsx + route css")
     v.add_argument("dir", nargs="?", default=".")
     v.set_defaults(fn=cmd_verify)
+
+    sub.add_parser("selftest", help="check the css splitter").set_defaults(fn=cmd_selftest)
 
     a = ap.parse_args()
     a.fn(a)

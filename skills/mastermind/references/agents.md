@@ -55,7 +55,7 @@ CODE NAVIGATION: <graph available? "Query the code graph MCP tools to locate sym
 
 <paste style-rules.md STYLE BLOCK>
 
-DESIGN (frontend tasks only): follow docs/DESIGN.md tokens/components exactly; the approved mockup wireframe/<page>.html is the structural + visual contract — reuse its tokens.css values as the project's design tokens.
+DESIGN (frontend tasks only): follow docs/DESIGN.md tokens/components exactly. The approved mockups are the structural + visual contract, but you do NOT read them — <React/Next stack: "the contract is already code: import from components/*.tsx and use the project design tokens seeded from wireframe/tokens.css" | non-React stack: "read exactly one mockup file, wireframe/<page>.html, plus wireframe/tokens.css — no other page"> . For anything else about the mockup set (what pages exist, what sections/states/components a page has), read wireframe/INDEX.md, and .h2r/manifest.md for structure. Opening mockup HTML beyond what this paragraph allows is a protocol violation — say so in your report instead.
 
 VERIFY before reporting: <task-specific check — run build, run the test, open the page>. Report what you ran and its actual output.
 
@@ -78,7 +78,7 @@ CHECK, in order:
 2. API: every external/internal API call in the diff exists in docs/API_RECORD.md with a matching signature. Unlisted or mismatched call = automatic FAIL.
 3. TASK CRITERIA: <review criteria from the plan task>.
 4. QUALITY: correctness bugs, security at trust boundaries, data-loss risks. Style-only nitpicks are NOT findings.
-5. (frontend tasks) DESIGN: matches docs/DESIGN.md + approved wireframe; run the audit rubric in references/design/impeccable.md §Audit; any Absolute Ban present = FAIL.
+5. (frontend tasks) DESIGN: matches docs/DESIGN.md and the approved mockup contract — check it against wireframe/INDEX.md (sections, states, components for this page) and the project's design tokens, NOT by opening wireframe/*.html; run the audit rubric in references/design/impeccable.md §Audit; any Absolute Ban present = FAIL.
 
 Do not fix anything. Do not invent findings to look thorough — a clean PASS is a valid outcome.
 
